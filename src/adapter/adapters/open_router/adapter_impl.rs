@@ -1,11 +1,13 @@
 use crate::ModelIden;
 use crate::adapter::openai::OpenAIAdapter;
 use crate::adapter::{Adapter, AdapterKind, ServiceType, WebRequestData};
-use crate::chat::{ChatOptionsSet, ChatRequest, ChatResponse, ChatStreamResponse};
+use crate::chat::{ChatOptionsSet, ChatRequest, ChatResponse, ChatStreamResponse, ReasoningEffort};
 use crate::resolver::{AuthData, Endpoint};
 use crate::webc::WebResponse;
 use crate::{Result, ServiceTarget};
 use reqwest::RequestBuilder;
+use serde_json::json;
+use value_ext::JsonValueExt;
 
 /// The OpenRouter API is compatible with the OpenAI API.
 /// NOTE: This adapter is activated for namespaced model names (e.g., `open_router::openai/gpt-4.1`)
@@ -44,7 +46,12 @@ impl Adapter for OpenRouterAdapter {
 		chat_req: ChatRequest,
 		chat_options: ChatOptionsSet<'_, '_>,
 	) -> Result<WebRequestData> {
-		OpenAIAdapter::util_to_web_request_data(target, service_type, chat_req, chat_options, None)
+		let effort = chat_options.reasoning_effort().and_then(ReasoningEffort::as_keyword);
+		let mut data = OpenAIAdapter::util_to_web_request_data(target, service_type, chat_req, chat_options, None)?;
+		if let Some(effort) = effort {
+			data.payload.x_insert("reasoning", json!({ "effort": effort }))?;
+		}
+		Ok(data)
 	}
 
 	fn to_chat_response(
